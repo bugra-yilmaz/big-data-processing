@@ -21,7 +21,7 @@ Write a process to generate RF (recency, frequency) metrics for page views, aggr
 - code/app delivered should be such that it can be easily productionized
 - code/app should generate the output in csv format
 
-##### Input parameters to be passed to the process
+##### Input parameters to be passed to the app
 
 - pagetype – 'news, movies'
 - metrictype – 'fre, dur'
