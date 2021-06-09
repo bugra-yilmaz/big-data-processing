@@ -9,7 +9,7 @@ Write a process to generate RF (recency, frequency) metrics for page views, aggr
 
 ##### For you to decide:
 
-- language (python/scala)
+- develop app using (PySpark/ScalaSpark)
 - partition strategy
 - data processing approach
 
@@ -18,7 +18,8 @@ Write a process to generate RF (recency, frequency) metrics for page views, aggr
 - number of time windows may increase
 - pagetype could include new types in the future
 - processing historical data ocurres often
-- code delivered should be such that it can be easily productionized
+- code/app delivered should be such that it can be easily productionized
+- code/app should generate the output in csv format
 
 ##### Input parameters to be passed to the process
 
