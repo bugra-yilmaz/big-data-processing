@@ -46,4 +46,4 @@ Write a process to generate RF (recency, frequency) metrics for page views, aggr
 ##### Metric definitions:
 
 - pageview_news_fre_365 - no of page views for news page type in last 365 days
-- pageview_news_dur_730 - recency of page views for news category in last 365 days
+- pageview_news_dur - recency of page views for news category before date of reference
