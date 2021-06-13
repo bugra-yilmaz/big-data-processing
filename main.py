@@ -1,5 +1,9 @@
+import os
 import argparse
 import datetime
+
+from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType, StructField, IntegerType, StringType, DateType
 
 
 def parse_values(argument):
@@ -20,4 +24,22 @@ if __name__ == '__main__':
     time_windows = list(map(int, parse_values(args.t)))
     reference_date = datetime.datetime.strptime(args.d, '%d/%m/%Y').strftime('%Y-%m-%d')
 
-    print(page_types, metric_types, time_windows, reference_date)
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    fact_file_path = os.path.join(dir_path, 'fact.csv')
+    lookup_file_path = os.path.join(dir_path, 'lookup.csv')
+
+    spark = SparkSession.builder.appName('adidas-bigdata-processing').getOrCreate()
+
+    schema_fact = StructType([
+        StructField('USER_ID', IntegerType(), False),
+        StructField('EVENT_DATE', DateType(), False),
+        StructField('WEB_PAGEID', IntegerType(), False)
+    ])
+
+    schema_lookup = StructType([
+        StructField('WEB_PAGEID', IntegerType(), False),
+        StructField('WEBPAGE_TYPE', StringType(), False),
+    ])
+
+    fact = spark.read.csv(fact_file_path, schema=schema_fact, header=True, dateFormat='dd/MM/yyyy HH:mm')
+    lookup = spark.read.csv(lookup_file_path, schema=schema_lookup, header=True)
