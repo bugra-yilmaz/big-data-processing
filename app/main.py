@@ -22,8 +22,8 @@ if __name__ == '__main__':
 
     # Define input file paths
     dir_path = os.path.dirname(os.path.realpath(__file__))
-    fact_file_path = os.path.join(dir_path, 'fact.csv')
-    lookup_file_path = os.path.join(dir_path, 'lookup.csv')
+    fact_file_path = os.path.join(dir_path, 'data', 'fact.csv')
+    lookup_file_path = os.path.join(dir_path, 'data', 'lookup.csv')
 
     # Parse command line arguments
     page_types = parse_values(args.p)
