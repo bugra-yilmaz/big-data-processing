@@ -209,7 +209,7 @@ if __name__ == "__main__":
         "--n-partitions",
         help="Number of partitions for the main dataframe.",
         dest="np",
-        default=8,
+        default=16,
         metavar="",
     )
     argument_parser.add_argument(
