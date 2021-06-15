@@ -71,6 +71,7 @@ if __name__ == '__main__':
     argument_parser.add_argument('-t', '--time-window', help='Time windows - separated by comma.', dest='t', metavar='')
     argument_parser.add_argument('-d', '--date-ref', help='Reference date.',
                                  dest='d', metavar='')
+    argument_parser.add_argument('-o', '--output', help='Output file path.', dest='o', default='output', metavar='')
     args = argument_parser.parse_args()
 
     # Define input file paths
@@ -127,4 +128,4 @@ if __name__ == '__main__':
 
     # Coalesce resulting dataframe to a single partition to output a single .csv file
     result_df = result_df.coalesce(1)
-    result_df.write.option('header', 'true').mode('overwrite').csv('output')
+    result_df.write.option('header', 'true').mode('overwrite').csv(args.o)
