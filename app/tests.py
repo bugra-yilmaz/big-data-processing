@@ -1,4 +1,10 @@
+# Created by bugra-yilmaz on 13.06.2021.
+#
+# Unit testing module for data transformation operations used in the Spark processing job.
+
+# Imports
 import pytest
+import pyspark.sql
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql.types import StructType, StructField, IntegerType, StringType
 import pyspark.sql.functions as F
@@ -8,7 +14,7 @@ from main import parse_argument, get_spark_session, filter_and_join_data, get_in
 
 # Provide Spark session fixture for unit tests
 @pytest.fixture
-def spark_session():
+def spark_session() -> pyspark.sql.SparkSession:
     spark = SparkSession.builder.appName('adidas-bigdata-processing').master('local[*]').getOrCreate()
     return spark
 
@@ -43,7 +49,7 @@ def test_get_spark_session():
 
 
 # Test initial filtering with reference date and page types, and join with lookup dataframe
-def test_filter_and_join_data(spark_session):
+def test_filter_and_join_data(spark_session: pyspark.sql.SparkSession):
     fact = [(710, '2016-08-18 09:42', 102), (710, '2016-02-29 14:24', 155), (619, '2016-03-01 15:27', 102),
             (619, '2016-03-25 00:51', 188), (180, '2016-04-28 00:24', 196), (623, '2016-01-31 21:45', 126),
             (710, '2016-04-27 22:24', 196), (87, '2018-11-26 22:04', 112), (479, '2016-04-27 22:24', 196),
@@ -81,7 +87,7 @@ def test_filter_and_join_data(spark_session):
 
 
 # Test main computation stage where temporary dataframes are generated per page type with all metrics and time windows
-def test_get_intermediate_dataframe(spark_session):
+def test_get_intermediate_dataframe(spark_session: pyspark.sql.SparkSession):
     fact = [(710, '2016-08-18 09:42', 102), (710, '2016-02-29 14:24', 155), (619, '2016-03-01 15:27', 102),
             (619, '2016-03-25 00:51', 188), (180, '2016-04-28 00:24', 196), (623, '2016-01-31 21:45', 126),
             (710, '2016-04-27 22:24', 196), (87, '2018-11-26 22:04', 112), (479, '2016-04-27 22:24', 196),

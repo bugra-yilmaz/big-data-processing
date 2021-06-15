@@ -1,13 +1,19 @@
+# Created by bugra-yilmaz on 13.06.2021.
+#
+# Main Spark processing job.
+
+# Imports
 import os
 import argparse
 import datetime
 
+import pyspark.sql
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType, StructField, IntegerType, StringType, DateType
 import pyspark.sql.functions as F
 
 
-def parse_argument(argument):
+def parse_argument(argument: str) -> list[str]:
     """
     Parses given command line argument by splitting it on commas and cleaning whitespaces.
 
@@ -15,14 +21,14 @@ def parse_argument(argument):
         argument (str): Command line argument.
 
     Returns:
-        list of str: List of argument values.
+        list[str]: List of argument values.
 
     """
 
     return [x.strip() for x in argument.split(',') if x.strip()]
 
 
-def get_spark_session():
+def get_spark_session() -> pyspark.sql.SparkSession:
     """
     Generates a Spark session with all the available cores in the local machine.
 
@@ -35,7 +41,8 @@ def get_spark_session():
     return spark
 
 
-def filter_and_join_data(fact_df, lookup_df, reference_date, page_types):
+def filter_and_join_data(fact_df: pyspark.sql.DataFrame, lookup_df: pyspark.sql.DataFrame,
+                         reference_date: str, page_types: list[str]) -> pyspark.sql.DataFrame:
     """
     Filters the given 'fact' dataframe by reference date and page types.
     After removing all events later than the reference date, joins the resulting dataframe with the 'lookup' dataframe.
@@ -46,7 +53,7 @@ def filter_and_join_data(fact_df, lookup_df, reference_date, page_types):
         fact_df (pyspark.sql.DataFrame): 'fact' dataframe containing user events.
         lookup_df (pyspark.sql.DataFrame): 'lookup' dataframe containing page id - page type pairs.
         reference_date (str): Reference date in 'yyyy-MM-dd' format.
-        page_types (list of str): List of requested page types.
+        page_types (list[str]): List of requested page types.
 
     Returns:
         pyspark.sql.DataFrame: Filtered and joined dataframe.
@@ -65,18 +72,20 @@ def filter_and_join_data(fact_df, lookup_df, reference_date, page_types):
     return fact_df
 
 
-def get_intermediate_dataframe(fact_df, metric_types, page_type, reference_date, time_windows, frequency_column_names):
+def get_intermediate_dataframe(fact_df: pyspark.sql.DataFrame, metric_types: list[str],
+                               page_type: str, reference_date: str, time_windows: list[int],
+                               frequency_column_names: list[str]) -> pyspark.sql.DataFrame:
     """
     Generates an intermediate dataframe from the given dataframe, containing all the metrics for a single page type.
     Resulting dataframes will be later joined to produce the final result.
 
     Args:
         fact_df (pyspark.sql.DataFrame): 'fact' dataframe containing user events matched to the page types.
-        metric_types (list of str): List of requested metrics e.g. ['fre', 'dur'].
+        metric_types (list[str]): List of requested metrics e.g. ['fre', 'dur'].
         page_type (str): A single page type assigned to the intermediate dataframe.
         reference_date (str): Reference date in 'yyyy-MM-dd' format.
-        time_windows (list of int): Time windows to be used for frequency metric calculation, e.g [365, 730, 1460].
-        frequency_column_names (list of str): List of frequency column names, to be used for replacing null values
+        time_windows (list[int]): Time windows to be used for frequency metric calculation, e.g [365, 730, 1460].
+        frequency_column_names (list[str]): List of frequency column names, to be used for replacing null values
         with zeros.
 
     Returns:
