@@ -31,6 +31,6 @@ You will find the output .csv file in *output* folder in your project directory.
 ### Run tests
 Unit testing is available with ```pytest``` for the batch processing code included in the *app*. You can run the unit tests in the container:
 ```bash
-docker exec -it spark bash -c "python3 -m pytest"
+docker exec -it spark bash -c "python3 -m pytest tests.py"
 ```
 Test results will be displayed on your terminal.
