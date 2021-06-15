@@ -26,7 +26,6 @@ You can copy the output file to your local machine:
 ```bash
 docker cp spark:/usr/src/app/output.csv .
 ```
-You will find the output .csv file in *output* folder in your project directory.
 
 ### Run tests
 Unit testing is available with ```pytest``` for the batch processing code included in the *app*. You can run the unit tests in the container:
