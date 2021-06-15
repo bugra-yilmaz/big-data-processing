@@ -6,12 +6,14 @@ import pyspark.sql.functions as F
 from main import parse_argument, get_spark_session, filter_and_join_data, get_intermediate_dataframe
 
 
+# Provide Spark session fixture for unit tests
 @pytest.fixture
 def spark_session():
     spark = SparkSession.builder.appName('adidas-bigdata-processing').master('local[*]').getOrCreate()
     return spark
 
 
+# Test argument parsing for command line arguments
 def test_parse_values():
     argument, parsed = 'news, movies', ['news', 'movies']
     assert parsed == parse_argument(argument)
@@ -26,6 +28,7 @@ def test_parse_values():
     assert parsed == parse_argument(argument)
 
 
+# Test spark session generation
 def test_get_spark_session():
     spark_session = get_spark_session()
     assert type(spark_session) == SparkSession
@@ -39,6 +42,7 @@ def test_get_spark_session():
     assert type(df) == DataFrame
 
 
+# Test initial filtering with reference date and page types, and join with lookup dataframe
 def test_filter_and_join_data(spark_session):
     fact = [(710, '2016-08-18 09:42', 102), (710, '2016-02-29 14:24', 155), (619, '2016-03-01 15:27', 102),
             (619, '2016-03-25 00:51', 188), (180, '2016-04-28 00:24', 196), (623, '2016-01-31 21:45', 126),
@@ -76,6 +80,7 @@ def test_filter_and_join_data(spark_session):
     assert joined_filtered_df.count() == 20
 
 
+# Test main computation stage where temporary dataframes are generated per page type with all metrics and time windows
 def test_get_intermediate_dataframe(spark_session):
     fact = [(710, '2016-08-18 09:42', 102), (710, '2016-02-29 14:24', 155), (619, '2016-03-01 15:27', 102),
             (619, '2016-03-25 00:51', 188), (180, '2016-04-28 00:24', 196), (623, '2016-01-31 21:45', 126),
