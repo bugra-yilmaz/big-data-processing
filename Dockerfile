@@ -8,8 +8,14 @@ RUN wget https://archive.apache.org/dist/spark/spark-3.1.2/spark-3.1.2-bin-hadoo
     tar xvf spark-3.1.2-bin-hadoop3.2.tgz && \
     mv spark-3.1.2-bin-hadoop3.2/ /usr/local/spark
 
+ENV SPARK_HOME=/usr/local/spark
+ENV PYSPARK_PYTHON=python3
+
 WORKDIR /usr/src/app
 
 COPY ./app /usr/src/app
 
 RUN pip3 install -r requirements.txt
+
+RUN sed 's/log4j.rootCategory=INFO/log4j.rootCategory=ERROR/g' \
+    /usr/local/spark/conf/log4j.properties.template > /usr/local/spark/conf/log4j.properties
