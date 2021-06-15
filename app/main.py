@@ -7,7 +7,7 @@ from pyspark.sql.types import StructType, StructField, IntegerType, StringType, 
 import pyspark.sql.functions as F
 
 
-def parse_values(argument):
+def parse_argument(argument):
     # Split argument strings on commas
     return [x.strip() for x in argument.split(',') if x.strip()]
 
@@ -79,9 +79,9 @@ if __name__ == '__main__':
     lookup_file_path = os.path.join(dir_path, 'data', 'lookup.csv')
 
     # Parse command line arguments
-    page_types = parse_values(args.p)
-    metric_types = parse_values(args.m)
-    time_windows = list(map(int, parse_values(args.t)))
+    page_types = parse_argument(args.p)
+    metric_types = parse_argument(args.m)
+    time_windows = list(map(int, parse_argument(args.t)))
     reference_date = datetime.datetime.strptime(args.d, '%d/%m/%Y').strftime('%Y-%m-%d')
 
     spark = SparkSession.builder.appName('adidas-bigdata-processing').master('local[*]').getOrCreate()
@@ -127,5 +127,4 @@ if __name__ == '__main__':
 
     # Coalesce resulting dataframe to a single partition to output a single .csv file
     result_df = result_df.coalesce(1)
-    result_df.show(1000)
     result_df.write.option('header', 'true').mode('overwrite').csv('output')
