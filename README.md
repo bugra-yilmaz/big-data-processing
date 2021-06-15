@@ -2,7 +2,7 @@
 
 ## Run
 In order to run the container, you will need ```docker``` installed in your machine:
-- For MacOS, go to [Docker Hub](https://hub.docker.com/editions/community/docker-ce-desktop-mac/).
+- For macOS, go to [Docker Hub](https://hub.docker.com/editions/community/docker-ce-desktop-mac/).
 - For Ubuntu, go to [Install Docker Engine on Ubuntu](https://docs.docker.com/engine/install/ubuntu/).
 
 Then, first, build the Docker image:
@@ -24,7 +24,7 @@ This will produce the requested output file in the container.
 
 You can copy the output file to your local machine:
 ```bash
-docker cp spark:/usr/src/app/output .
+docker cp spark:/usr/src/app/output.csv .
 ```
 You will find the output .csv file in *output* folder in your project directory.
 
@@ -38,31 +38,31 @@ Test results will be displayed on your terminal.
 ## Approach
 
 #### Insights from dataset
-The first thing we will notice about the sample data is that a big majority of the users have very few actions. More precisely, there are ```435``` users in the dataset, ```401``` of them (```92%```) have only a single event. This also means that, at the end of the analysis, we will see that most of the users have meaningful values for only one page type.
+The first thing we will notice about the sample data is that big majority of users have very few actions. More precisely, there are ```435``` users in the dataset, ```401``` of them (```92%```) have only a single event. This also means that, at the end of the analysis, we will see that most of the users have meaningful values for only one page type.
 
 A similar unbalanced distribution is present in event dates. We have data between years 2015 and 2019 (both included). However, ```78%``` of the events belong to the year 2016 whereas the year 2019 has only one event.
 
 When we look at the page type distribution, we see that ```news``` type is too dominant. ```movies``` consists of only ```2.6%``` of the user events.
 
 #### Partitioning strategy
-For the sake of this assignment, since the computation forces us to group user ids in worker nodes, partitioning the dataset by the user ids made the most sense. Another partitioning strategy may result in a costly reshuffling of the data when the *groupby* command is executed.
+For the sake of this assignment, since the computation forces us to group user ids in worker nodes, partitioning the dataset by the user ids made the most sense. Another partitioning strategy may result in a costly reshuffling of data when the *groupby* command is executed.
 
 However, we should keep in mind the fact that most of the users have very few actions. So, we need to avoid ending up with too many partitions which will drastically hurt Spark's performance. Setting the number of partitions equal to the number of available worker nodes and using a "hash partitioner" to distribute users equally to the worker nodes seemed like the right approach here. During a test run, with 4 partitions, I had ```112```, ```109```, ```97``` and ```117``` users in partitions respectively, which can be considered as a balanced distribution.
 
-Another point that is worth to be mentioned is whether we have an established partitioning strategy on disk. For this kind of a use case, we would probably accumulate new data every day. So, the best practice for partitioning the data on disk would be partitioning it by date, e.g. ```yyyy/yyyy-mm-dd/``` or  ```yyyy-mm-dd/```. In this case, let's think about partitioning the data by user ids when running the Spark job, namely:
+Another point that is worth to be mentioned is whether we have an established partitioning schema on disk. For this kind of use case, we would probably accumulate new data every day. So, the best practice for partitioning the data on disk would be partitioning it by date, e.g. ```yyyy/yyyy-mm-dd/``` or  ```yyyy-mm-dd/```. With this in mind, let's think about what happens when we partition the data by user ids in the Spark job, namely:
 ```python
 df = df.repartition(n, 'USER_ID')
 ```
 
-This will reshuffle the data by user ids in order to avoid reshuffling at *groupby*. But, letting Spark do reshuffling by itself when it sees the *groupby* execution may result in a better performance considering Spark's inner optimization algorithms. In my opinion, the best approach would be to try both strategies with large datasets to see which one performs better for this use case.
+This will reshuffle the data by user ids. In fact, letting Spark do reshuffling by itself when it sees the *groupby* execution may result in a better performance considering Spark's inner optimization algorithms. In my opinion, the best approach would be to try both strategies with large datasets to see which one performs better for this use case.
 
 #### Compare strategies with an augmented dataset
-For getting an insight about how these strategies would perform in a real use case, I augmented the given data in ```fact.csv``` by repeating the rows with different user ids (randomly generated ones). This resulted in a .csv file with 262 M lines (~ 7 GB on disk).
+For getting an insight about how these strategies would compare in a real use case, I augmented the given data in ```fact.csv``` by repeating the rows with different user ids (randomly generated ones). This resulted in a .csv file with 262 M lines (~ 7 GB on disk).
 
-I executed the Spark job on this file with the arguments specified in the assignment description. Average execution times from 5 runs  with each option are below (I have 8 cores in my local machine):
-- Without partitioning by user id: 209.3 seconds.
-- Without partitioning by user id, caching join results at last stage: 228.4 seconds.
-- Partitioning by user id: 131.9 seconds.
-- Partitioning by user id, caching join results at last stage: 270.6 seconds. 
+I executed the Spark job on this file with the arguments specified in the assignment description. Average execution times from 5 runs per each option are below (I have 8 cores in my local machine):
+- w/o partitioning by user id: ```209.3``` seconds.
+- w/o partitioning by user id, caching join results at last stage: ```228.4``` seconds.
+- partitioning by user id: ```131.9``` seconds.
+- partitioning by user id, caching join results at last stage: ```270.6``` seconds. 
 
-Apparently, partitioning by user id improves the performance of Spark for this use case. But, again, we need to keep in mind the fact that the results may differ when we use a remote Spark cluster and also when we have an existing partitioning schema when storing the data on disk.
+Apparently, partitioning by user id (w/o caching) improves the performance of Spark for this use case. But, again, we need to keep in mind the fact that the results may differ when we use a remote Spark cluster and/or when we have an existing partitioning schema when storing the data on disk.
