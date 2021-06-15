@@ -8,7 +8,60 @@ import pyspark.sql.functions as F
 
 
 def parse_values(argument):
+    # Split argument strings on commas
     return [x.strip() for x in argument.split(',') if x.strip()]
+
+
+def get_spark_session():
+    # Create a Spark session with all the available cores in the local machine
+    spark = SparkSession.builder.appName('adidas-bigdata-processing').master('local[*]').getOrCreate()
+
+    return spark
+
+
+def filter_and_join_data(fact_df, lookup_df, reference_date, page_types):
+    # Remove data with dates later than the reference date
+    fact_df = fact_df.filter(fact_df.EVENT_DATE < F.lit(reference_date))
+
+    # Join dataframes - broadcast the small lookup dataframe
+    fact_df = fact_df.join(F.broadcast(lookup_df), 'WEB_PAGEID').drop('WEB_PAGEID')
+
+    # Remove data with other page types
+    fact_df = fact_df.filter(fact_df.WEBPAGE_TYPE.isin(page_types))
+
+    return fact_df
+
+
+def get_intermediate_dataframe(fact_df, metric_types, page_type, reference_date, time_windows, frequency_column_names):
+    aggs = []
+
+    # Keep data with a single page type
+    temp_df = fact_df.filter(fact_df.WEBPAGE_TYPE == F.lit(page_type))
+
+    if 'dur' in metric_types:
+        recency_column_name = f'pageview_{page_type}_dur'
+
+        # Calculate recency metric as the difference between latest event date and the reference date
+        agg = F.datediff(F.lit(reference_date), F.max(temp_df.EVENT_DATE)). \
+            alias(recency_column_name)
+        aggs.append(agg)
+
+    if 'fre' in metric_types:
+        for time_window in time_windows:
+            frequency_column_name = f'pageview_{page_type}_fre_{time_window}'
+
+            # Calculate frequency metric as a count of event dates within the time window
+            agg = F.count(F.when(F.date_add(temp_df.EVENT_DATE, time_window) > F.lit(reference_date), 1)). \
+                alias(frequency_column_name)
+            aggs.append(agg)
+
+            # Keep frequency column names to replace null values later
+            frequency_column_names.append(frequency_column_name)
+
+    # Apply all the aggregates on the intermediate dataframe
+    temp_df = temp_df.groupby(['USER_ID']).agg(*aggs)
+
+    return temp_df
 
 
 if __name__ == '__main__':
@@ -45,59 +98,34 @@ if __name__ == '__main__':
     ])
 
     fact_df = spark.read.csv(fact_file_path, schema=fact_schema, header=True, dateFormat='dd/MM/yyyy HH:mm')
+
     # Partition the dataframe by user id
     fact_df = fact_df.repartition(8, 'USER_ID')
 
     lookup_df = spark.read.csv(lookup_file_path, schema=lookup_schema, header=True)
 
-    # Remove data with dates later than the reference date
-    fact_df = fact_df.filter(fact_df.EVENT_DATE < F.lit(reference_date))
+    fact_df = filter_and_join_data(fact_df, lookup_df, reference_date, page_types)
 
-    # Join dataframes - broadcast the small lookup dataframe
-    fact_df = fact_df.join(F.broadcast(lookup_df), 'WEB_PAGEID').drop('WEB_PAGEID')
-
-    # Remove data with other page types
-    fact_df = fact_df.filter(fact_df.WEBPAGE_TYPE.isin(page_types))
-
-    # Calculate end dates and time window matches for given time windows
     result_df = None
-    frequency_columns = []
+    frequency_column_names = []
     for page_type in page_types:
-        aggs = []
-        # Keep data with only one page type
-        temp_df = fact_df.filter(fact_df.WEBPAGE_TYPE == F.lit(page_type))
+        # Calculate intermediate dataframe - metrics for a single page type
+        temp_df = get_intermediate_dataframe(fact_df, metric_types, page_type, reference_date,
+                                             time_windows, frequency_column_names)
 
-        if 'dur' in metric_types:
-            # Calculate recency metric as an aggregate with F.max and F.datediff
-            aggs.append(F.datediff(F.lit(reference_date), F.max(temp_df.EVENT_DATE)).alias(f'pageview_{page_type}_dur'))
-
-        if 'fre' in metric_types:
-            for time_window in time_windows:
-                # Add 0/1 match column for every time window - 0: event not in time window, 1: event in time window
-                temp_df = temp_df.\
-                    withColumn(f'{time_window}_match',
-                               ((F.date_add(temp_df.EVENT_DATE, time_window) > F.lit(reference_date)).cast('integer')))
-
-                frequency_column = f'pageview_{page_type}_fre_{time_window}'
-                # Calculate frequency metric as an aggregate with F.sum
-                aggs.append(F.sum(F.col(f'{time_window}_match')).alias(frequency_column))
-
-                frequency_columns.append(frequency_column)
-
-        temp_df = temp_df.groupby(['USER_ID']).agg(*aggs)
-
-        # Join temporary (one page type) dataframe to the resulting dataframe by user id
+        # Join temporary (single page type) dataframe to the resulting dataframe by user id
         if result_df:
-            # Full outer join to keep null frequency and recency values
+            # Full outer join to calculate null frequency and recency values
             result_df = result_df.join(temp_df, 'USER_ID', how='full')
-        # If resulting dataframe is not initialized, start with the first temporary dataframe
+        # If not initialized, start with the first intermediate dataframe
         else:
             result_df = temp_df
 
     # Replace null frequency values with 0
     if 'fre' in metric_types:
-        result_df = result_df.fillna(0, frequency_columns)
+        result_df = result_df.fillna(0, frequency_column_names)
 
     # Coalesce resulting dataframe to a single partition to output a single .csv file
     result_df = result_df.coalesce(1)
+    result_df.show(1000)
     result_df.write.option('header', 'true').mode('overwrite').csv('output')
