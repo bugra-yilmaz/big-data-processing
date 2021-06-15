@@ -60,10 +60,10 @@ For getting an insight about how these strategies would compare in a real use ca
 
 I executed the Spark job on this file with the arguments specified in the assignment description. Average execution times from 5 runs per each option are below (note: tested with 8 cores on local machine):
 - w/o partitioning by user id: ```209.3``` seconds.
-- partitioning by user id, with 8 partitions: ```131.9``` seconds.
-- partitioning by user id, with 16 partitions: ```117.8``` seconds.
-- partitioning by user id, with 32 partitions: ```122.3``` seconds.
-- partitioning by user id, with 64 partitions: ```123.9``` seconds.
+- partitioning by user id, with ```8``` partitions: ```131.9``` seconds.
+- partitioning by user id, with ```16``` partitions: ```117.8``` seconds.
+- partitioning by user id, with ```32``` partitions: ```122.3``` seconds.
+- partitioning by user id, with ```64``` partitions: ```123.9``` seconds.
 
 Apparently, partitioning by user id improves the performance of Spark for this use case. The best performing case is partitioning by user id with ```16``` partitions (2x number of available cores). But, again, we need to keep in mind the fact that the results may differ when we use a remote Spark cluster and/or when we have an existing partitioning schema on disk.
 
