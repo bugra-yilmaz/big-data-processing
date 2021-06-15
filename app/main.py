@@ -122,6 +122,8 @@ if __name__ == '__main__':
     argument_parser.add_argument('-t', '--time-window', help='Time windows - separated by comma.', dest='t', metavar='')
     argument_parser.add_argument('-d', '--date-ref', help='Reference date.',
                                  dest='d', metavar='')
+    argument_parser.add_argument('-np', '--n-partitions', help='Number of partitions for the main dataframe.',
+                                 dest='np', default=8, metavar='')
     argument_parser.add_argument('-o', '--output', help='Output file path.', dest='o', default='output', metavar='')
     args = argument_parser.parse_args()
 
@@ -152,7 +154,7 @@ if __name__ == '__main__':
     fact_df = spark.read.csv(fact_file_path, schema=fact_schema, header=True, dateFormat='dd/MM/yyyy HH:mm')
 
     # Partition the dataframe by user id
-    fact_df = fact_df.repartition(8, 'USER_ID')
+    fact_df = fact_df.repartition(args.np, 'USER_ID')
 
     lookup_df = spark.read.csv(lookup_file_path, schema=lookup_schema, header=True)
 
