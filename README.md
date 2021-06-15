@@ -58,15 +58,17 @@ This will reshuffle the data by user ids. In fact, letting Spark do reshuffling 
 #### Compare strategies with an augmented dataset
 For getting an insight about how these strategies would compare in a real use case, I augmented the given data in ```fact.csv``` by repeating the rows with different user ids (randomly generated ones). This resulted in a .csv file with 262 M lines (~ 7 GB on disk).
 
-I executed the Spark job on this file with the arguments specified in the assignment description. Average execution times from 5 runs per each option are below (I have 8 cores in my local machine):
+I executed the Spark job on this file with the arguments specified in the assignment description. Average execution times from 5 runs per each option are below (note: tested with 8 cores on local machine):
 - w/o partitioning by user id: ```209.3``` seconds.
-- w/o partitioning by user id, caching join results at last stage: ```228.4``` seconds.
-- partitioning by user id: ```131.9``` seconds.
-- partitioning by user id, caching join results at last stage: ```270.6``` seconds. 
+- partitioning by user id, with 8 partitions: ```131.9``` seconds.
+- partitioning by user id, with 16 partitions: ```117.8``` seconds.
+- partitioning by user id, with 32 partitions: ```122.3``` seconds.
+- partitioning by user id, with 64 partitions: ```123.9``` seconds.
 
-Apparently, partitioning by user id (w/o caching) improves the performance of Spark for this use case. But, again, we need to keep in mind the fact that the results may differ when we use a remote Spark cluster and/or when we have an existing partitioning schema when storing the data on disk.
+Apparently, partitioning by user id improves the performance of Spark for this use case. The best performing case is partitioning by user id with ```16``` partitions (2x number of available cores). But, again, we need to keep in mind the fact that the results may differ when we use a remote Spark cluster and/or when we have an existing partitioning schema on disk.
 
 ## Further work
 - Run the Spark app on a remote cluster. Databricks would be a good option.
 - Measure performance with an existing, realistic partitioning schema on disk, e.g. partition ```fact.csv``` by date.
+- Move the application to Scala Spark for performance tests.
 - Bonus: Move the system to streaming.
