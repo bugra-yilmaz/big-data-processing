@@ -1,49 +1,36 @@
 # use-case-data-processing
 
-Write a process to generate RF (recency, frequency) metrics for page views, aggregated by user, using the attached datasets.
+## Run
+In order to run the container, you will need ```docker``` installed in your machine:
+- For MacOS, go to [Docker Hub](https://hub.docker.com/editions/community/docker-ce-desktop-mac/).
+- For Ubuntu, go to [Install Docker Engine on Ubuntu](https://docs.docker.com/engine/install/ubuntu/).
 
-##### Assume:
+Then, first, build the Docker image:
+```bash
+docker build -t spark .
+```
 
-- fact.csv to be bigger than 500Gb
-- lookup.csv to be a static, small file
+Start the container:
+```bash
+docker run --name spark -d -t spark
+```
 
-##### For you to decide:
+### Run processing job
+In order to run the processing job in the container, you can execute the command below. Please specify your own input parameters.
+```bash
+docker exec -it spark bash -c "spark-submit main.py -p 'news, movies' -m 'fre, dur' -t '365, 730, 1460, 2920' -d '12/10/2019'"
+```
+This will produce the requested output file in the container.
 
-- develop app using (PySpark/ScalaSpark)
-- partition strategy
-- data processing approach
+You can copy the output file to your local machine:
+```bash
+docker cp spark:/usr/src/app/output .
+```
+You will find the output .csv file in *output* folder in your project directory.
 
-##### Have in mind:
-
-- number of time windows may increase
-- pagetype could include new types in the future
-- processing historical data ocurres often
-- code/app delivered should be such that it can be easily productionized
-- code/app should generate the output in csv format
-
-##### Input parameters to be passed to the app
-
-- pagetype – 'news, movies'
-- metrictype – 'fre, dur'
-- timewindow – '365, 730, 1460, 2920'
-- dateofreference - '12/10/2019'
-
-##### Outputs given by the process (a file like below) with around 10 metrics e.g.
-
-| user_id | pageview_news_dur | pageview_news_fre_365 | pageview_news_fre_730 | ...|
-| ------- | ----------------- | --------------------- | --------------------- | -- |
-
-##### Output metrics naming convention to be followed:
-
-`pageview_<pagetype>_<metrictype>_<timewindow>`
-
-
-## Reference
-
-- fre - frequency of page views (count)
-- dur - recency of page views (no. of days since the last page view from date of reference)
-
-##### Metric definitions:
-
-- pageview_news_fre_365 - no of page views for news page type in last 365 days
-- pageview_news_dur - recency of page views for news category before date of reference
+### Run tests
+Unit testing is available with ```pytest``` for the batch processing code included in the *app*. You can run the unit tests in the container:
+```bash
+docker exec -it spark bash -c "python3 -m pytest"
+```
+Test results will be displayed on your terminal.
