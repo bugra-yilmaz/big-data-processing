@@ -65,3 +65,8 @@ I executed the Spark job on this file with the arguments specified in the assign
 - partitioning by user id, caching join results at last stage: ```270.6``` seconds. 
 
 Apparently, partitioning by user id (w/o caching) improves the performance of Spark for this use case. But, again, we need to keep in mind the fact that the results may differ when we use a remote Spark cluster and/or when we have an existing partitioning schema when storing the data on disk.
+
+## Further work
+- Run the Spark app on a remote cluster. Databricks would be a good option.
+- Measure performance with an existing, realistic partitioning schema on disk, e.g. partition ```fact.csv``` by date.
+- Bonus: Move the system to streaming.
