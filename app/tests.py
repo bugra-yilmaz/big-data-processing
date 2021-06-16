@@ -14,7 +14,7 @@ import pyspark.sql.functions as F
 from main import (
     parse_argument,
     get_spark_session,
-    get_intermediate_dataframe,
+    calculate_rf_metrics,
 )
 
 AnyTuple = Tuple[Any, Any]
@@ -101,10 +101,15 @@ def sample_data(spark_session: pyspark.sql.SparkSession) -> AnyTuple:
     return fact_df, lookup_df
 
 
-@pytest.mark.parametrize("argument, parsed", [("news, movies", ["news", "movies"]),
-                                              ("fre,dur  ", ["fre", "dur"]),
-                                              ("news,", ["news"]),
-                                              ("365,730, 1460,2920", ["365", "730", "1460", "2920"])])
+@pytest.mark.parametrize(
+    "argument, parsed",
+    [
+        ("news, movies", ["news", "movies"]),
+        ("fre,dur  ", ["fre", "dur"]),
+        ("news,", ["news"]),
+        ("365,730, 1460,2920", ["365", "730", "1460", "2920"]),
+    ],
+)
 def test_parse_values(argument, parsed):
     assert parsed == parse_argument(argument)
 
@@ -126,37 +131,107 @@ def test_get_spark_session():
     assert type(df) == DataFrame
 
 
-def test_get_intermediate_dataframe(sample_data: AnyTuple):
+@pytest.mark.parametrize(
+    "metric_types, page_types, reference_date, time_windows, count, names",
+    [
+        (
+            ["fre"],
+            ["news"],
+            "2017-10-12",
+            [365, 730],
+            15,
+            ["USER_ID", "pageview_news_fre_365", "pageview_news_fre_730"],
+        ),
+        (
+            ["fre", "dur"],
+            ["news"],
+            "2017-10-12",
+            [365, 730],
+            15,
+            [
+                "USER_ID",
+                "pageview_news_dur",
+                "pageview_news_fre_365",
+                "pageview_news_fre_730",
+            ],
+        ),
+        (
+            ["dur"],
+            ["news"],
+            "2019-01-01",
+            [365, 730],
+            18,
+            ["USER_ID", "pageview_news_dur"],
+        ),
+        (
+            ["fre"],
+            ["news"],
+            "2017-10-12",
+            [365, 730],
+            15,
+            ["USER_ID", "pageview_news_fre_365", "pageview_news_fre_730"],
+        ),
+        (
+            ["fre", "dur"],
+            ["news", "movies"],
+            "2019-10-12",
+            [365, 730, 1460, 2920],
+            20,
+            [
+                "USER_ID",
+                "pageview_news_dur",
+                "pageview_news_fre_365",
+                "pageview_news_fre_730",
+                "pageview_news_fre_1460",
+                "pageview_news_fre_2920",
+                "pageview_movies_dur",
+                "pageview_movies_fre_365",
+                "pageview_movies_fre_730",
+                "pageview_movies_fre_1460",
+                "pageview_movies_fre_2920",
+            ],
+        ),
+        (
+            ["fre", "dur"],
+            ["news"],
+            "2019-10-12",
+            [365, 730, 1460, 2920],
+            18,
+            [
+                "USER_ID",
+                "pageview_news_dur",
+                "pageview_news_fre_365",
+                "pageview_news_fre_730",
+                "pageview_news_fre_1460",
+                "pageview_news_fre_2920",
+            ],
+        ),
+    ],
+)
+def test_calculate_rf_metrics_for_page_type(
+    sample_data: AnyTuple,
+    metric_types: StringList,
+    page_types: StringList,
+    reference_date: str,
+    time_windows: IntList,
+    count: int,
+    names: StringList,
+):
     fact_df, lookup_df = sample_data
-
-    reference_date, page_types = "2017-10-12", ["news", "movies"]
 
     fact_df = fact_df.filter(fact_df.EVENT_DATE < F.lit(reference_date))
     lookup_df = lookup_df.filter(lookup_df.WEBPAGE_TYPE.isin(page_types))
-    fact_df = fact_df.join(F.broadcast(lookup_df), "WEB_PAGEID").drop("WEB_PAGEID")
+    fact_df = fact_df.join(lookup_df, "WEB_PAGEID").drop("WEB_PAGEID")
 
-    metric_types, page_type, time_windows = ["fre"], "news", [365, 730]
-    temp_df = get_intermediate_dataframe(
-        fact_df, metric_types, page_type, reference_date, time_windows, []
+    assert (
+        calculate_rf_metrics(
+            fact_df, metric_types, page_types, reference_date, time_windows
+        ).count()
+        == count
     )
-    assert temp_df.select(F.sum("pageview_news_fre_365")).collect()[0][0] == 1
-    assert temp_df.select(F.sum("pageview_news_fre_730")).collect()[0][0] == 21
-
-    metric_types, page_type, time_windows = ["fre", "dur"], "movies", [365, 730]
-    temp_df = get_intermediate_dataframe(
-        fact_df, metric_types, page_type, reference_date, time_windows, []
+    assert (
+        calculate_rf_metrics(
+            fact_df, metric_types, page_types, reference_date, time_windows
+        ).schema.names
+        == names
     )
-    assert [
-        val.pageview_movies_dur
-        for val in temp_df.select("pageview_movies_dur").collect()
-    ] == [620, 617, 566]
-    assert temp_df.select(F.sum("pageview_movies_fre_730")).collect()[0][0] == 3
-
-    metric_types, page_type, time_windows = ["dur"], "news", [365, 730]
-    temp_df = get_intermediate_dataframe(
-        fact_df, metric_types, page_type, reference_date, time_windows, []
-    )
-    assert temp_df.schema.names == ["USER_ID", "pageview_news_dur"]
-    assert [
-        val.pageview_news_dur for val in temp_df.select("pageview_news_dur").collect()
-    ] == [532, 469, 533, 448, 600, 592, 590, 420, 268, 532, 532, 420, 533, 532, 607]

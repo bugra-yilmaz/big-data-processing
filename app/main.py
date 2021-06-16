@@ -49,26 +49,22 @@ def get_spark_session() -> pyspark.sql.SparkSession:
     return spark
 
 
-def get_intermediate_dataframe(
+def calculate_rf_metrics(
     fact_df: pyspark.sql.DataFrame,
     metric_types: StringList,
-    page_type: str,
+    page_types: StringList,
     reference_date: str,
     time_windows: IntList,
-    frequency_column_names: StringList,
 ) -> pyspark.sql.DataFrame:
     """
-    Generates an intermediate dataframe from the given dataframe, containing all the metrics for a single page type.
-    Resulting dataframes will later be joined to produce the final result.
+    Calculates recency and frequency metrics for the given dataframe and user inputs.
 
     Args:
         fact_df (pyspark.sql.DataFrame): 'fact' dataframe containing user events matched to the page types.
         metric_types (list[str]): List of requested metrics e.g. ['fre', 'dur'].
-        page_type (str): A single page type assigned to the intermediate dataframe.
+        page_types (list[str]): Page types included in the analysis.
         reference_date (str): Reference date in 'yyyy-MM-dd' format.
         time_windows (list[int]): Time windows to be used for frequency metric calculation, e.g [365, 730, 1460].
-        frequency_column_names (list[str]): List of frequency column names, to be used for replacing null values
-        with zeros.
 
     Returns:
         pyspark.sql.DataFrame: Intermediate dataframe containing calculated metrics for a single page type.
@@ -76,39 +72,61 @@ def get_intermediate_dataframe(
     """
 
     aggs = []
-
-    # Keep data with a single page type to calculate metrics per page type
-    temp_df = fact_df.filter(fact_df.WEBPAGE_TYPE == F.lit(page_type))
-
-    if "dur" in metric_types:
-        recency_column_name = f"pageview_{page_type}_dur"
-
-        # Calculate recency metric as the difference between latest event date and the reference date
-        agg = F.datediff(F.lit(reference_date), F.max(temp_df.EVENT_DATE)).alias(
-            recency_column_name
-        )
-        aggs.append(agg)
-
-    if "fre" in metric_types:
-        for time_window in time_windows:
-            frequency_column_name = f"pageview_{page_type}_fre_{time_window}"
-
-            # Calculate frequency metric as a count of event dates within the time window
-            agg = F.count(
-                F.when(
-                    F.date_add(temp_df.EVENT_DATE, time_window) > F.lit(reference_date),
-                    1,
-                )
-            ).alias(frequency_column_name)
+    column_names = []
+    dur_column_names = []
+    for page_type in page_types:
+        if "dur" in metric_types:
+            dur_column_name = f"pageview_{page_type}_dur"
+            # Calculate recency metric as the difference between latest event date and the reference date
+            agg = F.when(
+                fact_df.WEBPAGE_TYPE == F.lit(page_type),
+                F.datediff(F.lit(reference_date), F.max(fact_df.EVENT_DATE)),
+            ).alias(dur_column_name)
             aggs.append(agg)
+            # Keep recency columns to replace 0s in later stages
+            dur_column_names.append(dur_column_name)
+            column_names.append(dur_column_name)
 
-            # Keep frequency column names to replace null values later
-            frequency_column_names.append(frequency_column_name)
+        if "fre" in metric_types:
+            for time_window in time_windows:
+                fre_column_name = f"pageview_{page_type}_fre_{time_window}"
 
-    # Apply all the aggregates on the intermediate dataframe to obtain requested metrics
-    temp_df = temp_df.groupby(["USER_ID"]).agg(*aggs)
+                # Calculate frequency metric as a count of event dates within the time window
+                agg = F.count(
+                    F.when(
+                        (
+                            (fact_df.WEBPAGE_TYPE == F.lit(page_type))
+                            & (
+                                F.date_add(fact_df.EVENT_DATE, time_window)
+                                > F.lit(reference_date)
+                            )
+                        ),
+                        1,
+                    )
+                ).alias(fre_column_name)
+                aggs.append(agg)
 
-    return temp_df
+                column_names.append(fre_column_name)
+
+    # Here, we get one row per each user - page type pair
+    result_df = fact_df.groupby("USER_ID", "WEBPAGE_TYPE").agg(*aggs)
+    # For each row, the other page types will have null values, replace them with 0s for the sake of sum aggregation
+    result_df = result_df.fillna(0, column_names)
+
+    aggs = [F.sum(column).alias(column) for column in column_names]
+    result_df = result_df.groupby("USER_ID").agg(*aggs)
+
+    # Replace 0 recency values with null as 0 recency makes no sense
+    if "dur" in metric_types:
+        for dur_column_name in dur_column_names:
+            result_df = result_df.withColumn(
+                dur_column_name,
+                F.when(result_df[dur_column_name] == 0, None).otherwise(
+                    result_df[dur_column_name]
+                ),
+            )
+
+    return result_df
 
 
 def merge_csv_files(output_directory: str, output_file_path: str):
@@ -227,34 +245,15 @@ if __name__ == "__main__":
     fact_df = fact_df.filter(fact_df.EVENT_DATE < F.lit(reference_date))
 
     lookup_df = spark.read.csv(lookup_file_path, schema=lookup_schema, header=True)
-    # Remove data with other page types as we don't need them in the analysis
+    # Remove pages with other page types as we don't need them in the analysis
     lookup_df = lookup_df.filter(lookup_df.WEBPAGE_TYPE.isin(page_types))
 
     # Join dataframes, broadcast the lookup dataframe as it is a small, static file that does not need to be partitioned
     fact_df = fact_df.join(F.broadcast(lookup_df), "WEB_PAGEID").drop("WEB_PAGEID")
 
-    result_df = None
-    frequency_column_names = []
-    for page_type in page_types:
-        # Calculate intermediate dataframe - metrics for a single page type
-        temp_df = get_intermediate_dataframe(
-            fact_df,
-            metric_types,
-            page_type,
-            reference_date,
-            time_windows,
-            frequency_column_names,
-        )
-
-        if result_df:
-            # Full outer join to calculate null frequency and recency values
-            result_df = result_df.join(temp_df, "USER_ID", how="full")
-        # If not initialized, start with the first intermediate dataframe
-        else:
-            result_df = temp_df
-
-    if "fre" in metric_types:
-        result_df = result_df.fillna(0, frequency_column_names)
+    result_df = calculate_rf_metrics(
+        fact_df, metric_types, page_types, reference_date, time_windows
+    )
 
     result_df.write.option("header", "true").mode("overwrite").csv(args.o)
     merge_csv_files(args.o, args.o + ".csv")
