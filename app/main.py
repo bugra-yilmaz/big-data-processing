@@ -49,41 +49,6 @@ def get_spark_session() -> pyspark.sql.SparkSession:
     return spark
 
 
-def filter_by_date_and_join(
-    fact_df: pyspark.sql.DataFrame,
-    lookup_df: pyspark.sql.DataFrame,
-    reference_date: str,
-    page_types: StringList,
-) -> pyspark.sql.DataFrame:
-    """
-    Filters the given 'fact' dataframe by reference date and page types.
-    After removing all events later than the reference date, joins the resulting dataframe with the 'lookup' dataframe.
-    Broadcasts the 'lookup' dataframe to the worker nodes.
-    Finally, removes events that belong to other page types.
-
-    Args:
-        fact_df (pyspark.sql.DataFrame): 'fact' dataframe containing user events.
-        lookup_df (pyspark.sql.DataFrame): 'lookup' dataframe containing page id - page type pairs.
-        reference_date (str): Reference date in 'yyyy-MM-dd' format.
-        page_types (list[str]): List of requested page types.
-
-    Returns:
-        pyspark.sql.DataFrame: Filtered and joined dataframe.
-
-    """
-
-    # Remove events with dates later than the reference date as we don't need them in the analysis
-    fact_df = fact_df.filter(fact_df.EVENT_DATE < F.lit(reference_date))
-
-    # Join dataframes, broadcast the lookup dataframe as it is a small, static file that does not need to be partitioned
-    fact_df = fact_df.join(F.broadcast(lookup_df), "WEB_PAGEID").drop("WEB_PAGEID")
-
-    # Remove data with other page types as we don't need them in the analysis
-    fact_df = fact_df.filter(fact_df.WEBPAGE_TYPE.isin(page_types))
-
-    return fact_df
-
-
 def get_intermediate_dataframe(
     fact_df: pyspark.sql.DataFrame,
     metric_types: StringList,
@@ -258,10 +223,15 @@ if __name__ == "__main__":
         fact_file_path, schema=fact_schema, header=True, dateFormat="dd/MM/yyyy HH:mm"
     )
     fact_df = fact_df.repartition(args.np, "USER_ID")
+    # Remove events with dates later than the reference date as we don't need them in the analysis
+    fact_df = fact_df.filter(fact_df.EVENT_DATE < F.lit(reference_date))
 
     lookup_df = spark.read.csv(lookup_file_path, schema=lookup_schema, header=True)
+    # Remove data with other page types as we don't need them in the analysis
+    lookup_df = lookup_df.filter(lookup_df.WEBPAGE_TYPE.isin(page_types))
 
-    fact_df = filter_by_date_and_join(fact_df, lookup_df, reference_date, page_types)
+    # Join dataframes, broadcast the lookup dataframe as it is a small, static file that does not need to be partitioned
+    fact_df = fact_df.join(F.broadcast(lookup_df), "WEB_PAGEID").drop("WEB_PAGEID")
 
     result_df = None
     frequency_column_names = []

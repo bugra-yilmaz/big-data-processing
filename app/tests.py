@@ -3,6 +3,8 @@
 # Unit testing module for data transformation operations used in the Spark processing job.
 
 # Imports
+from typing import Tuple, List, Any
+
 import pytest
 import pyspark.sql
 from pyspark.sql import SparkSession, DataFrame
@@ -12,9 +14,12 @@ import pyspark.sql.functions as F
 from main import (
     parse_argument,
     get_spark_session,
-    filter_by_date_and_join,
     get_intermediate_dataframe,
 )
+
+AnyTuple = Tuple[Any, Any]
+StringList = List[str]
+IntList = List[int]
 
 
 # Provide Spark session fixture for unit tests
@@ -28,17 +33,79 @@ def spark_session() -> pyspark.sql.SparkSession:
     return spark
 
 
-def test_parse_values():
-    argument, parsed = "news, movies", ["news", "movies"]
-    assert parsed == parse_argument(argument)
+# Provide sample data fixture for unit tests
+@pytest.fixture
+def sample_data(spark_session: pyspark.sql.SparkSession) -> AnyTuple:
+    fact = [
+        (710, "2016-08-18 09:42", 102),
+        (710, "2016-02-29 14:24", 155),
+        (619, "2016-03-01 15:27", 102),
+        (619, "2016-03-25 00:51", 188),
+        (180, "2016-04-28 00:24", 196),
+        (623, "2016-01-31 21:45", 126),
+        (710, "2016-04-27 22:24", 196),
+        (87, "2018-11-26 22:04", 112),
+        (479, "2016-04-27 22:24", 196),
+        (320, "2017-01-17 01:20", 149),
+        (540, "2016-04-28 00:24", 196),
+        (644, "2016-02-20 13:12", 190),
+        (970, "2016-04-28 00:24", 196),
+        (970, "2016-06-30 14:02", 102),
+        (701, "2016-01-17 11:40", 200),
+        (9, "2018-01-12 13:48", 111),
+        (507, "2016-07-21 16:51", 157),
+        (701, "2016-02-13 07:32", 102),
+        (651, "2016-04-28 00:24", 196),
+        (160, "2016-04-28 00:24", 196),
+        (710, "2016-04-27 22:24", 196),
+        (189, "2016-02-28 15:58", 102),
+        (658, "2016-08-18 20:53", 166),
+        (420, "2016-04-27 22:24", 196),
+        (710, "2016-04-27 22:24", 196),
+        (47, "2018-11-26 22:04", 112),
+        (285, "2016-02-03 08:49", 187),
+    ]
 
-    argument, parsed = "fre,dur  ", ["fre", "dur"]
-    assert parsed == parse_argument(argument)
+    lookup = [
+        (102, "news"),
+        (155, "news"),
+        (188, "movies"),
+        (196, "news"),
+        (126, "movies"),
+        (112, "news"),
+        (149, "news"),
+        (190, "news"),
+        (200, "news"),
+        (111, "news"),
+        (157, "news"),
+        (166, "news"),
+        (187, "movies"),
+    ]
+    fact_schema = StructType(
+        [
+            StructField("USER_ID", IntegerType(), False),
+            StructField("EVENT_DATE", StringType(), False),
+            StructField("WEB_PAGEID", IntegerType(), False),
+        ]
+    )
+    lookup_schema = StructType(
+        [
+            StructField("WEB_PAGEID", IntegerType(), False),
+            StructField("WEBPAGE_TYPE", StringType(), False),
+        ]
+    )
+    fact_df = spark_session.createDataFrame(fact, schema=fact_schema)
+    fact_df = fact_df.withColumn("EVENT_DATE", F.to_timestamp("EVENT_DATE"))
+    lookup_df = spark_session.createDataFrame(lookup, schema=lookup_schema)
 
-    argument, parsed = "news,", ["news"]
-    assert parsed == parse_argument(argument)
+    return fact_df, lookup_df
 
-    argument, parsed = "365,730, 1460,2920", ["365", "730", "1460", "2920"]
+
+@pytest.mark.parametrize("argument, parsed", [("news, movies", ["news", "movies"]),
+                                              ("fre,dur  ", ["fre", "dur"]),
+                                              ("news,", ["news"]),
+                                              ("365,730, 1460,2920", ["365", "730", "1460", "2920"])])
+def test_parse_values(argument, parsed):
     assert parsed == parse_argument(argument)
 
 
@@ -59,148 +126,14 @@ def test_get_spark_session():
     assert type(df) == DataFrame
 
 
-def test_filter_by_date_and_join(spark_session: pyspark.sql.SparkSession):
-    fact = [
-        (710, "2016-08-18 09:42", 102),
-        (710, "2016-02-29 14:24", 155),
-        (619, "2016-03-01 15:27", 102),
-        (619, "2016-03-25 00:51", 188),
-        (180, "2016-04-28 00:24", 196),
-        (623, "2016-01-31 21:45", 126),
-        (710, "2016-04-27 22:24", 196),
-        (87, "2018-11-26 22:04", 112),
-        (479, "2016-04-27 22:24", 196),
-        (320, "2017-01-17 01:20", 149),
-        (540, "2016-04-28 00:24", 196),
-        (644, "2016-02-20 13:12", 190),
-        (970, "2016-04-28 00:24", 196),
-        (970, "2016-06-30 14:02", 102),
-        (701, "2016-01-17 11:40", 200),
-        (9, "2018-01-12 13:48", 111),
-        (507, "2016-07-21 16:51", 157),
-        (701, "2016-02-13 07:32", 102),
-        (651, "2016-04-28 00:24", 196),
-        (160, "2016-04-28 00:24", 196),
-        (710, "2016-04-27 22:24", 196),
-        (189, "2016-02-28 15:58", 102),
-        (658, "2016-08-18 20:53", 166),
-        (420, "2016-04-27 22:24", 196),
-        (710, "2016-04-27 22:24", 196),
-        (47, "2018-11-26 22:04", 112),
-        (285, "2016-02-03 08:49", 187),
-    ]
-
-    lookup = [
-        (102, "news"),
-        (155, "news"),
-        (188, "movies"),
-        (196, "news"),
-        (126, "movies"),
-        (112, "news"),
-        (149, "news"),
-        (190, "news"),
-        (200, "news"),
-        (111, "news"),
-        (157, "news"),
-        (166, "news"),
-        (187, "movies"),
-    ]
-    fact_schema = StructType(
-        [
-            StructField("USER_ID", IntegerType(), False),
-            StructField("EVENT_DATE", StringType(), False),
-            StructField("WEB_PAGEID", IntegerType(), False),
-        ]
-    )
-    lookup_schema = StructType(
-        [
-            StructField("WEB_PAGEID", IntegerType(), False),
-            StructField("WEBPAGE_TYPE", StringType(), False),
-        ]
-    )
-
-    fact_df = spark_session.createDataFrame(fact, schema=fact_schema)
-    fact_df = fact_df.withColumn("EVENT_DATE", F.to_timestamp("EVENT_DATE"))
-    lookup_df = spark_session.createDataFrame(lookup, schema=lookup_schema)
-
-    reference_date, page_types = "2019-10-12", ["sports"]
-    joined_filtered_df = filter_by_date_and_join(
-        fact_df, lookup_df, reference_date, page_types
-    )
-    assert joined_filtered_df.count() == 0
-
-    reference_date, page_types = "2017-01-01", ["news"]
-    joined_filtered_df = filter_by_date_and_join(
-        fact_df, lookup_df, reference_date, page_types
-    )
-    assert joined_filtered_df.count() == 20
-
-
-def test_get_intermediate_dataframe(spark_session: pyspark.sql.SparkSession):
-    fact = [
-        (710, "2016-08-18 09:42", 102),
-        (710, "2016-02-29 14:24", 155),
-        (619, "2016-03-01 15:27", 102),
-        (619, "2016-03-25 00:51", 188),
-        (180, "2016-04-28 00:24", 196),
-        (623, "2016-01-31 21:45", 126),
-        (710, "2016-04-27 22:24", 196),
-        (87, "2018-11-26 22:04", 112),
-        (479, "2016-04-27 22:24", 196),
-        (320, "2017-01-17 01:20", 149),
-        (540, "2016-04-28 00:24", 196),
-        (644, "2016-02-20 13:12", 190),
-        (970, "2016-04-28 00:24", 196),
-        (970, "2016-06-30 14:02", 102),
-        (701, "2016-01-17 11:40", 200),
-        (9, "2018-01-12 13:48", 111),
-        (507, "2016-07-21 16:51", 157),
-        (701, "2016-02-13 07:32", 102),
-        (651, "2016-04-28 00:24", 196),
-        (160, "2016-04-28 00:24", 196),
-        (710, "2016-04-27 22:24", 196),
-        (189, "2016-02-28 15:58", 102),
-        (658, "2016-08-18 20:53", 166),
-        (420, "2016-04-27 22:24", 196),
-        (710, "2016-04-27 22:24", 196),
-        (47, "2018-11-26 22:04", 112),
-        (285, "2016-02-03 08:49", 187),
-    ]
-
-    lookup = [
-        (102, "news"),
-        (155, "news"),
-        (188, "movies"),
-        (196, "news"),
-        (126, "movies"),
-        (112, "news"),
-        (149, "news"),
-        (190, "news"),
-        (200, "news"),
-        (111, "news"),
-        (157, "news"),
-        (166, "news"),
-        (187, "movies"),
-    ]
-    fact_schema = StructType(
-        [
-            StructField("USER_ID", IntegerType(), False),
-            StructField("EVENT_DATE", StringType(), False),
-            StructField("WEB_PAGEID", IntegerType(), False),
-        ]
-    )
-    lookup_schema = StructType(
-        [
-            StructField("WEB_PAGEID", IntegerType(), False),
-            StructField("WEBPAGE_TYPE", StringType(), False),
-        ]
-    )
-    fact_df = spark_session.createDataFrame(fact, schema=fact_schema)
-    fact_df = fact_df.withColumn("EVENT_DATE", F.to_timestamp("EVENT_DATE"))
-    lookup_df = spark_session.createDataFrame(lookup, schema=lookup_schema)
+def test_get_intermediate_dataframe(sample_data: AnyTuple):
+    fact_df, lookup_df = sample_data
 
     reference_date, page_types = "2017-10-12", ["news", "movies"]
-    fact_df = filter_by_date_and_join(fact_df, lookup_df, reference_date, page_types)
+
+    fact_df = fact_df.filter(fact_df.EVENT_DATE < F.lit(reference_date))
+    lookup_df = lookup_df.filter(lookup_df.WEBPAGE_TYPE.isin(page_types))
+    fact_df = fact_df.join(F.broadcast(lookup_df), "WEB_PAGEID").drop("WEB_PAGEID")
 
     metric_types, page_type, time_windows = ["fre"], "news", [365, 730]
     temp_df = get_intermediate_dataframe(
