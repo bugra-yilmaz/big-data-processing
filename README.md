@@ -1,4 +1,6 @@
-# use-case-data-processing
+# big-data-processing
+
+A PySpark application to generate aggregate metrics based on weblogs data.
 
 ## Run
 In order to run the container, you will need ```docker``` installed in your machine:
@@ -44,7 +46,7 @@ A similar unbalanced distribution is present in event dates. We have data betwee
 When we look at the page type distribution, we see that ```news``` type is too dominant. ```movies``` consists of only ```2.6%``` of the user events.
 
 #### Partitioning strategy
-For the sake of this assignment, since the computation forces us to group user ids in worker nodes, partitioning the dataset by the user ids made the most sense. Another partitioning strategy may result in a costly reshuffling of data when the *groupby* command is executed.
+For the sake of this use case, since the computation forces us to group user ids in worker nodes, partitioning the dataset by the user ids made the most sense. Another partitioning strategy may result in a costly reshuffling of data when the *groupby* command is executed.
 
 However, we should keep in mind the fact that most of the users have very few actions. So, we need to avoid ending up with too many partitions which will drastically hurt Spark's performance. Setting the number of partitions equal to the number of available worker nodes and using a "hash partitioner" to distribute users equally to the worker nodes seemed like the right approach here. During a test run, with 4 partitions, I had ```112```, ```109```, ```97``` and ```117``` users in partitions respectively, which can be considered as a balanced distribution.
 
