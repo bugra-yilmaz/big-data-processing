@@ -6,17 +6,48 @@ from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType, StructField, IntegerType, StringType, DateType
 import pyspark.sql.functions as F
 
+# Users
+# Topics
+# Metrics
+# Pages
+# Page views
+
+# - Parsing input parameters
+# - Reading the data
+# - Filtering visits on dates and topics
+# - Joining visits on topics
+# - Calculate metrics
+# - Post processing
+# - Generating the output
+
+
+class PageViewDataPreprocessor:
+    DATE_COL = "EVENT_DATE"
+    PAGE_TYPE_COL = "WEBPAGE_TYPE"
+    PAGE_ID_COL = "WEB_PAGEID"
+
+    def __init__(self, page_type_df):
+        self.page_type_df = page_type_df
+
+    @classmethod
+    def filter_by_reference_date(cls, visit_df, reference_date):
+        return visit_df.filter(visit_df[cls.DATE_COL] < F.lit(reference_date))
+
+    @classmethod
+    def filter_by_page_type(cls, visit_df, page_types):
+        return visit_df.filter(visit_df[cls.PAGE_TYPE_COL].isin(page_types))
+
+    def add_page_type_to_visits(self, visit_df):
+        return visit_df.join(F.broadcast(self.page_type_df), self.PAGE_ID_COL).drop(self.PAGE_ID_COL)
+
+    def create_dataframe_for(self, visit_df, reference_date, page_types):
+        # To be implemented
+        return
+
 
 def parse_values(argument):
     # Split argument strings on commas
     return [x.strip() for x in argument.split(',') if x.strip()]
-
-
-def get_spark_session():
-    # Create a Spark session with all the available cores in the local machine
-    spark = SparkSession.builder.appName('adidas-bigdata-processing').master('local[*]').getOrCreate()
-
-    return spark
 
 
 def filter_and_join_data(fact_df, lookup_df, reference_date, page_types):
@@ -120,6 +151,7 @@ if __name__ == '__main__':
         # If not initialized, start with the first intermediate dataframe
         else:
             result_df = temp_df
+        result_df.show(10)
 
     # Replace null frequency values with 0
     if 'fre' in metric_types:
@@ -127,5 +159,5 @@ if __name__ == '__main__':
 
     # Coalesce resulting dataframe to a single partition to output a single .csv file
     result_df = result_df.coalesce(1)
-    result_df.show(1000)
+    result_df.show(10)
     result_df.write.option('header', 'true').mode('overwrite').csv('output')
